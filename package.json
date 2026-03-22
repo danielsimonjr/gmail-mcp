@@ -1,0 +1,25 @@
+{
+  "name": "gmail-mcp",
+  "version": "1.0.0",
+  "description": "Gmail MCP server wrapping Google Workspace CLI (gws) for Claude Code",
+  "main": "server.js",
+  "type": "module",
+  "bin": {
+    "gmail-mcp": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "mcp",
+    "gmail",
+    "claude-code",
+    "google-workspace"
+  ],
+  "author": "Daniel Simon Jr. <Daniel@danielsimonjr.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^3.25.76"
+  }
+}
