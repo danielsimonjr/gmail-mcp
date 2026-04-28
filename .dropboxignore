@@ -1,2 +1,6 @@
-﻿node_modules/
+# Git internals — keeps Dropbox out of .git so git operations don't get blocked
+.git/
+
+node_modules/
 .env
+
