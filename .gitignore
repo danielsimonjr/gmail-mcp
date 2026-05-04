@@ -1,2 +1,7 @@
 node_modules/
 .env
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
