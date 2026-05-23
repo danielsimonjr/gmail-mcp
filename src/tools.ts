@@ -1,6 +1,16 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+import { getGmail, withRetry, wrap } from "./client.js";
+import { withSenderMap, loadSenderMap, senderMapFile, type SenderMap } from "./state.js";
+import { extractHeader, extractSenderEmail } from "./format.js";
 
 export type ToolHandler = (raw: unknown) => Promise<string>;
+
+const EXCLUDED_LABELS = new Set([
+  "INBOX", "SPAM", "TRASH", "DRAFT", "SENT",
+  "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS", "CATEGORY_UPDATES", "CATEGORY_FORUMS", "CATEGORY_PERSONAL",
+  "STARRED", "IMPORTANT", "UNREAD",
+]);
 
 const RO_NON_DESTRUCTIVE = { readOnlyHint: true, destructiveHint: false };
 const MUT_NON_DESTRUCTIVE = { readOnlyHint: false, destructiveHint: false };
@@ -68,4 +78,180 @@ export const TOOLS: Tool[] = [
 ];
 
 // HANDLERS populated incrementally in Tasks 9–14.
-export const HANDLERS: Record<string, ToolHandler> = {};
+export const HANDLERS: Record<string, ToolHandler> = {
+  async gmail_scan_labels(raw) {
+    z.object({}).passthrough().parse(raw);
+    return wrap("gmail_scan_labels", async () => {
+      const gmail = await getGmail();
+      const labelsRes = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const labels = (labelsRes.data.labels ?? []).filter(
+        (l) => !EXCLUDED_LABELS.has(l.name ?? "") && !EXCLUDED_LABELS.has(l.id ?? ""),
+      );
+      let labelsScanned = 0;
+      let newOrUpdated = 0;
+      const newMap = await withSenderMap(async (m) => {
+        for (const label of labels) {
+          if (!label.id) continue;
+          labelsScanned++;
+          const msgList = await withRetry(() =>
+            gmail.users.messages.list({ userId: "me", labelIds: [label.id!], maxResults: 100 }),
+          );
+          for (const ref of msgList.data.messages ?? []) {
+            if (!ref.id) continue;
+            const msg = await withRetry(() =>
+              gmail.users.messages.get({
+                userId: "me",
+                id: ref.id!,
+                format: "metadata",
+                metadataHeaders: ["From", "Date"],
+              }),
+            );
+            const headers = msg.data.payload?.headers ?? [];
+            const sender = extractSenderEmail(extractHeader(headers, "From"));
+            if (!sender) continue;
+            const date = extractHeader(headers, "Date");
+            const existing = m[sender];
+            if (!existing || existing.label !== label.name) {
+              m[sender] = { label: label.name ?? label.id, date };
+              newOrUpdated++;
+            }
+          }
+        }
+        return m;
+      });
+      return {
+        status: "ok",
+        labels_scanned: labelsScanned,
+        total_senders: Object.keys(newMap).length,
+        new_or_updated: newOrUpdated,
+        map_file: senderMapFile(),
+      };
+    });
+  },
+
+  async gmail_sort_inbox(raw) {
+    z.object({}).passthrough().parse(raw);
+    return wrap("gmail_sort_inbox", async () => {
+      const map = await loadSenderMap();
+      if (Object.keys(map).length === 0)
+        return { status: "error", message: "No sender map. Run gmail_scan_labels first." };
+      const gmail = await getGmail();
+      const labelsRes = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const labelByName: Record<string, string> = {};
+      for (const l of labelsRes.data.labels ?? []) {
+        if (l.name && l.id) labelByName[l.name] = l.id;
+      }
+      const inboxList = await withRetry(() =>
+        gmail.users.messages.list({ userId: "me", labelIds: ["INBOX"], maxResults: 500 }),
+      );
+      const details: Array<{ subject: string; sender: string; label: string }> = [];
+      let moved = 0;
+      for (const ref of inboxList.data.messages ?? []) {
+        if (!ref.id) continue;
+        const msg = await withRetry(() =>
+          gmail.users.messages.get({
+            userId: "me",
+            id: ref.id!,
+            format: "metadata",
+            metadataHeaders: ["From", "Subject"],
+          }),
+        );
+        const headers = msg.data.payload?.headers ?? [];
+        const sender = extractSenderEmail(extractHeader(headers, "From"));
+        const subject = extractHeader(headers, "Subject");
+        const targetLabel = map[sender]?.label;
+        const targetId = targetLabel ? labelByName[targetLabel] : undefined;
+        if (targetId) {
+          await withRetry(() =>
+            gmail.users.messages.modify({
+              userId: "me",
+              id: ref.id!,
+              requestBody: { addLabelIds: [targetId], removeLabelIds: ["INBOX"] },
+            }),
+          );
+          if (details.length < 50) details.push({ subject, sender, label: targetLabel! });
+          moved++;
+        }
+      }
+      return { status: "ok", moved, details };
+    });
+  },
+
+  async gmail_preview_sort(raw) {
+    z.object({}).passthrough().parse(raw);
+    return wrap("gmail_preview_sort", async () => {
+      const map = await loadSenderMap();
+      if (Object.keys(map).length === 0)
+        return { status: "error", message: "No sender map. Run gmail_scan_labels first." };
+      const gmail = await getGmail();
+      const inboxList = await withRetry(() =>
+        gmail.users.messages.list({ userId: "me", labelIds: ["INBOX"], maxResults: 500 }),
+      );
+      const moveDetails: Array<{ subject: string; sender: string; label: string }> = [];
+      const unknownDetails: Array<{ subject: string; sender: string }> = [];
+      let wouldMove = 0;
+      let unknown = 0;
+      let total = 0;
+      for (const ref of inboxList.data.messages ?? []) {
+        if (!ref.id) continue;
+        total++;
+        const msg = await withRetry(() =>
+          gmail.users.messages.get({
+            userId: "me",
+            id: ref.id!,
+            format: "metadata",
+            metadataHeaders: ["From", "Subject"],
+          }),
+        );
+        const headers = msg.data.payload?.headers ?? [];
+        const sender = extractSenderEmail(extractHeader(headers, "From"));
+        const subject = extractHeader(headers, "Subject");
+        const label = map[sender]?.label;
+        if (label) {
+          wouldMove++;
+          if (moveDetails.length < 50) moveDetails.push({ subject, sender, label });
+        } else {
+          unknown++;
+          if (unknownDetails.length < 20) unknownDetails.push({ subject, sender });
+        }
+      }
+      return {
+        status: "ok",
+        total_inbox: total,
+        would_move: wouldMove,
+        unknown,
+        move_details: moveDetails,
+        unknown_details: unknownDetails,
+      };
+    });
+  },
+
+  async gmail_get_mappings(raw) {
+    const { label_filter, limit } = z
+      .object({ label_filter: z.string().nullish(), limit: z.number().default(200) })
+      .parse(raw);
+    return wrap("gmail_get_mappings", async () => {
+      const map = await loadSenderMap();
+      const filtered: SenderMap = {};
+      const labelSummary: Record<string, number> = {};
+      const filterLower = label_filter?.toLowerCase();
+      let shown = 0;
+      for (const [sender, entry] of Object.entries(map)) {
+        labelSummary[entry.label] = (labelSummary[entry.label] ?? 0) + 1;
+        if (filterLower && !entry.label.toLowerCase().includes(filterLower)) continue;
+        if (shown < limit) {
+          filtered[sender] = entry;
+          shown++;
+        }
+      }
+      return {
+        status: "ok",
+        total_senders: Object.keys(map).length,
+        results_shown: Object.keys(filtered).length,
+        map_file: senderMapFile(),
+        mappings: filtered,
+        label_summary: labelSummary,
+      };
+    });
+  },
+};
