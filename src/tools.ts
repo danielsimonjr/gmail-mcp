@@ -2,7 +2,8 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { getGmail, withRetry, wrap } from "./client.js";
 import { withSenderMap, loadSenderMap, senderMapFile, type SenderMap } from "./state.js";
-import { extractHeader, extractSenderEmail } from "./format.js";
+import { extractHeader, extractSenderEmail, decodeBody } from "./format.js";
+import { extractAttachments } from "./attachments.js";
 
 export type ToolHandler = (raw: unknown) => Promise<string>;
 
@@ -252,6 +253,95 @@ export const HANDLERS: Record<string, ToolHandler> = {
         mappings: filtered,
         label_summary: labelSummary,
       };
+    });
+  },
+
+  async gmail_list_labels(raw) {
+    z.object({}).passthrough().parse(raw);
+    return wrap("gmail_list_labels", async () => {
+      const gmail = await getGmail();
+      const res = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const labels = (res.data.labels ?? [])
+        .map((l) => ({ name: l.name ?? "", id: l.id ?? "", type: l.type ?? "user", total: l.messagesTotal ?? 0, unread: l.messagesUnread ?? 0 }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return { status: "ok", labels };
+    });
+  },
+
+  async gmail_list_emails(raw) {
+    const { label, limit, unread_only, page_token } = z.object({
+      label: z.string().default("INBOX"),
+      limit: z.number().default(20),
+      unread_only: z.boolean().default(false),
+      page_token: z.string().nullish(),
+    }).parse(raw);
+    return wrap("gmail_list_emails", async () => {
+      const gmail = await getGmail();
+      // Resolve label name → ID
+      const labelsRes = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const labelByName: Record<string, string> = {};
+      for (const l of (labelsRes.data.labels ?? [])) if (l.name && l.id) labelByName[l.name] = l.id;
+      const labelId = labelByName[label] ?? label;
+      const listRes = await withRetry(() => gmail.users.messages.list({
+        userId: "me",
+        labelIds: [labelId],
+        maxResults: limit,
+        ...(unread_only ? { q: "is:unread" } : {}),
+        ...(page_token ? { pageToken: page_token } : {}),
+      }));
+      const emails = await Promise.all(
+        (listRes.data.messages ?? []).map(async (ref) => {
+          const msg = await withRetry(() => gmail.users.messages.get({ userId: "me", id: ref.id!, format: "metadata", metadataHeaders: ["From", "Subject", "Date"] }));
+          const h = msg.data.payload?.headers ?? [];
+          return { id: msg.data.id!, sender: extractHeader(h, "From"), subject: extractHeader(h, "Subject"), date: extractHeader(h, "Date"), snippet: msg.data.snippet ?? "" };
+        }),
+      );
+      return { status: "ok", label, count: emails.length, emails, ...(listRes.data.nextPageToken ? { next_page_token: listRes.data.nextPageToken } : {}) };
+    });
+  },
+
+  async gmail_read_email(raw) {
+    const { message_id } = z.object({ message_id: z.string() }).parse(raw);
+    return wrap("gmail_read_email", async () => {
+      const gmail = await getGmail();
+      const msg = await withRetry(() => gmail.users.messages.get({ userId: "me", id: message_id, format: "full" }));
+      const h = msg.data.payload?.headers ?? [];
+      const attachments = extractAttachments(msg.data.payload ?? undefined);
+      const body = decodeBody(msg.data.payload ?? undefined).slice(0, 10000);
+      return {
+        status: "ok",
+        id: msg.data.id!,
+        from: extractHeader(h, "From"),
+        to: extractHeader(h, "To"),
+        subject: extractHeader(h, "Subject"),
+        date: extractHeader(h, "Date"),
+        body,
+        labels: msg.data.labelIds ?? [],
+        ...(attachments.length > 0 ? { attachments } : {}),
+      };
+    });
+  },
+
+  async gmail_search_emails(raw) {
+    const { query, limit, page_token } = z.object({
+      query: z.string(),
+      limit: z.number().default(20),
+      page_token: z.string().nullish(),
+    }).parse(raw);
+    return wrap("gmail_search_emails", async () => {
+      const gmail = await getGmail();
+      const listRes = await withRetry(() => gmail.users.messages.list({
+        userId: "me", q: query, maxResults: limit,
+        ...(page_token ? { pageToken: page_token } : {}),
+      }));
+      const emails = await Promise.all(
+        (listRes.data.messages ?? []).map(async (ref) => {
+          const msg = await withRetry(() => gmail.users.messages.get({ userId: "me", id: ref.id!, format: "metadata", metadataHeaders: ["From", "Subject", "Date"] }));
+          const h = msg.data.payload?.headers ?? [];
+          return { id: msg.data.id!, sender: extractHeader(h, "From"), subject: extractHeader(h, "Subject"), date: extractHeader(h, "Date"), snippet: msg.data.snippet ?? "" };
+        }),
+      );
+      return { status: "ok", query, count: emails.length, emails, ...(listRes.data.nextPageToken ? { next_page_token: listRes.data.nextPageToken } : {}) };
     });
   },
 };
