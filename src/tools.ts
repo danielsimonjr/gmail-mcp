@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getGmail, withRetry, wrap } from "./client.js";
 import { withSenderMap, loadSenderMap, senderMapFile, type SenderMap } from "./state.js";
 import { extractHeader, extractSenderEmail, decodeBody } from "./format.js";
-import { extractAttachments } from "./attachments.js";
+import { extractAttachments, readLocalAttachment } from "./attachments.js";
+import { buildPlainMessage, buildMultipartMessage } from "./mime.js";
 
 export type ToolHandler = (raw: unknown) => Promise<string>;
 
@@ -77,6 +78,26 @@ export const TOOLS: Tool[] = [
   { name: "gmail_download_attachment", description: "Download an attachment from a message to local disk. Default path: ~/Downloads/<filename>.", annotations: RO_NON_DESTRUCTIVE,
     inputSchema: { type: "object", properties: { message_id: STR(""), attachment_id: STR(""), local_path: STR("Optional explicit path or directory.") }, required: ["message_id", "attachment_id"], additionalProperties: false } },
 ];
+
+// Shared helpers — also used by Task 13 (draft handlers).
+function buildMessage(opts: {
+  to: string; subject: string; body: string; cc?: string;
+  inReplyTo?: string; references?: string; from?: string;
+  attachments?: string[];
+}): string {
+  if (opts.attachments && opts.attachments.length > 0) {
+    return buildMultipartMessage({
+      ...opts,
+      attachments: opts.attachments.map(readLocalAttachment),
+    });
+  }
+  return buildPlainMessage(opts);
+}
+
+function buildReferencesChain(origReferences: string, origMessageId: string): string {
+  const trimmed = origReferences.trim();
+  return trimmed ? `${trimmed} ${origMessageId}` : origMessageId;
+}
 
 // HANDLERS populated incrementally in Tasks 9–14.
 export const HANDLERS: Record<string, ToolHandler> = {
@@ -425,6 +446,79 @@ export const HANDLERS: Record<string, ToolHandler> = {
         await withRetry(() => gmail.users.messages.modify({ userId: "me", id, requestBody: body }));
       }
       return { status: "ok", marked: message_ids.length, action };
+    });
+  },
+
+  async gmail_send_email(raw) {
+    const args = z.object({
+      to: z.string(), subject: z.string(), body: z.string(),
+      cc: z.string().nullish(), attachments: z.array(z.string()).nullish(),
+    }).parse(raw);
+    return wrap("gmail_send_email", async () => {
+      const gmail = await getGmail();
+      const message = buildMessage({
+        to: args.to, subject: args.subject, body: args.body,
+        cc: args.cc ?? undefined,
+        attachments: args.attachments ?? undefined,
+      });
+      const res = await withRetry(() => gmail.users.messages.send({ userId: "me", requestBody: { raw: message } }));
+      return { status: "ok", message_id: res.data.id ?? "" };
+    });
+  },
+
+  async gmail_reply_email(raw) {
+    const args = z.object({
+      message_id: z.string(), body: z.string(),
+      attachments: z.array(z.string()).nullish(),
+    }).parse(raw);
+    return wrap("gmail_reply_email", async () => {
+      const gmail = await getGmail();
+      const orig = await withRetry(() => gmail.users.messages.get({ userId: "me", id: args.message_id, format: "metadata", metadataHeaders: ["Subject", "From", "Message-ID", "References"] }));
+      const h = orig.data.payload?.headers ?? [];
+      const origSubject = extractHeader(h, "Subject");
+      const origFrom = extractHeader(h, "From");
+      const origMsgId = extractHeader(h, "Message-ID");
+      const origRefs = extractHeader(h, "References");
+      const subject = /^re:\s/i.test(origSubject) ? origSubject : `Re: ${origSubject}`;
+      const message = buildMessage({
+        to: origFrom,
+        subject,
+        body: args.body,
+        inReplyTo: origMsgId,
+        references: buildReferencesChain(origRefs, origMsgId),
+        attachments: args.attachments ?? undefined,
+      });
+      const res = await withRetry(() => gmail.users.messages.send({
+        userId: "me",
+        requestBody: { raw: message, threadId: orig.data.threadId ?? undefined },
+      }));
+      return { status: "ok", message_id: res.data.id ?? "", thread_id: res.data.threadId ?? orig.data.threadId ?? "" };
+    });
+  },
+
+  async gmail_forward_email(raw) {
+    const args = z.object({
+      message_id: z.string(), to: z.string(),
+      body: z.string().default(""),
+      attachments: z.array(z.string()).nullish(),
+    }).parse(raw);
+    return wrap("gmail_forward_email", async () => {
+      const gmail = await getGmail();
+      const orig = await withRetry(() => gmail.users.messages.get({ userId: "me", id: args.message_id, format: "full" }));
+      const h = orig.data.payload?.headers ?? [];
+      const origSubject = extractHeader(h, "Subject");
+      const origFrom = extractHeader(h, "From");
+      const origBody = decodeBody(orig.data.payload ?? undefined);
+      const subject = /^fwd:\s/i.test(origSubject) ? origSubject : `Fwd: ${origSubject}`;
+      const forwardBody = `${args.body}\n\n---------- Forwarded message ----------\nFrom: ${origFrom}\nSubject: ${origSubject}\n\n${origBody}`;
+      const message = buildMessage({
+        to: args.to,
+        subject,
+        body: forwardBody,
+        attachments: args.attachments ?? undefined,
+      });
+      const res = await withRetry(() => gmail.users.messages.send({ userId: "me", requestBody: { raw: message } }));
+      return { status: "ok", message_id: res.data.id ?? "", forwarded_to: args.to };
     });
   },
 };
