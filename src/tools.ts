@@ -344,4 +344,87 @@ export const HANDLERS: Record<string, ToolHandler> = {
       return { status: "ok", query, count: emails.length, emails, ...(listRes.data.nextPageToken ? { next_page_token: listRes.data.nextPageToken } : {}) };
     });
   },
+
+  async gmail_move_emails(raw) {
+    const { message_ids, label } = z.object({ message_ids: z.array(z.string()), label: z.string() }).parse(raw);
+    return wrap("gmail_move_emails", async () => {
+      const gmail = await getGmail();
+      const labelsRes = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const labelByName: Record<string, string> = {};
+      for (const l of (labelsRes.data.labels ?? [])) if (l.name && l.id) labelByName[l.name] = l.id;
+      const targetId = labelByName[label] ?? label;
+      for (const id of message_ids) {
+        await withRetry(() => gmail.users.messages.modify({ userId: "me", id, requestBody: { addLabelIds: [targetId], removeLabelIds: ["INBOX"] } }));
+      }
+      return { status: "ok", moved: message_ids.length, target_label: label };
+    });
+  },
+
+  async gmail_delete_emails(raw) {
+    const { message_ids, permanent } = z.object({ message_ids: z.array(z.string()), permanent: z.boolean().default(false) }).parse(raw);
+    return wrap("gmail_delete_emails", async () => {
+      const gmail = await getGmail();
+      if (permanent) {
+        // Batch in one API call
+        await withRetry(() => gmail.users.messages.batchDelete({ userId: "me", requestBody: { ids: message_ids } }));
+      } else {
+        for (const id of message_ids) {
+          await withRetry(() => gmail.users.messages.trash({ userId: "me", id }));
+        }
+      }
+      return { status: "ok", deleted: message_ids.length, permanent };
+    });
+  },
+
+  async gmail_create_label(raw) {
+    const { name } = z.object({ name: z.string() }).parse(raw);
+    return wrap("gmail_create_label", async () => {
+      const gmail = await getGmail();
+      const res = await withRetry(() => gmail.users.labels.create({ userId: "me", requestBody: { name, labelListVisibility: "labelShow", messageListVisibility: "show" } }));
+      return { status: "ok", label: res.data.name ?? name, id: res.data.id ?? "" };
+    });
+  },
+
+  async gmail_rename_label(raw) {
+    const { old_name, new_name } = z.object({ old_name: z.string(), new_name: z.string() }).parse(raw);
+    return wrap("gmail_rename_label", async () => {
+      const gmail = await getGmail();
+      const labelsRes = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const match = (labelsRes.data.labels ?? []).find((l) => l.name === old_name);
+      if (!match?.id) return { status: "error", message: `Label '${old_name}' not found` };
+      await withRetry(() => gmail.users.labels.update({ userId: "me", id: match.id!, requestBody: { id: match.id!, name: new_name } }));
+      return { status: "ok", old_name, new_name };
+    });
+  },
+
+  async gmail_delete_label(raw) {
+    const { name } = z.object({ name: z.string() }).parse(raw);
+    return wrap("gmail_delete_label", async () => {
+      const gmail = await getGmail();
+      const labelsRes = await withRetry(() => gmail.users.labels.list({ userId: "me" }));
+      const match = (labelsRes.data.labels ?? []).find((l) => l.name === name);
+      if (!match?.id) return { status: "error", message: `Label '${name}' not found` };
+      await withRetry(() => gmail.users.labels.delete({ userId: "me", id: match.id! }));
+      return { status: "ok", deleted: name };
+    });
+  },
+
+  async gmail_mark_emails(raw) {
+    const { message_ids, action } = z.object({ message_ids: z.array(z.string()), action: z.string() }).parse(raw);
+    return wrap("gmail_mark_emails", async () => {
+      const ops: Record<string, { addLabelIds?: string[]; removeLabelIds?: string[] }> = {
+        read: { removeLabelIds: ["UNREAD"] },
+        unread: { addLabelIds: ["UNREAD"] },
+        star: { addLabelIds: ["STARRED"] },
+        unstar: { removeLabelIds: ["STARRED"] },
+      };
+      const body = ops[action];
+      if (!body) return { status: "error", message: `Unknown action: ${action}. Use: read, unread, star, unstar` };
+      const gmail = await getGmail();
+      for (const id of message_ids) {
+        await withRetry(() => gmail.users.messages.modify({ userId: "me", id, requestBody: body }));
+      }
+      return { status: "ok", marked: message_ids.length, action };
+    });
+  },
 };
