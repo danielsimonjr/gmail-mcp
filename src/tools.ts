@@ -1,9 +1,12 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { writeFileSync, mkdirSync, statSync, existsSync } from "node:fs";
+import { dirname, join as pathJoin } from "node:path";
+import { homedir } from "node:os";
 import { getGmail, withRetry, wrap } from "./client.js";
 import { withSenderMap, loadSenderMap, senderMapFile, type SenderMap } from "./state.js";
 import { extractHeader, extractSenderEmail, decodeBody } from "./format.js";
-import { extractAttachments, readLocalAttachment } from "./attachments.js";
+import { extractAttachments, readLocalAttachment, attachmentToBuffer } from "./attachments.js";
 import { buildPlainMessage, buildMultipartMessage } from "./mime.js";
 
 export type ToolHandler = (raw: unknown) => Promise<string>;
@@ -630,6 +633,35 @@ export const HANDLERS: Record<string, ToolHandler> = {
       const gmail = await getGmail();
       await withRetry(() => gmail.users.drafts.delete({ userId: "me", id: draft_id }));
       return { status: "ok", draft_id, deleted: true };
+    });
+  },
+
+  async gmail_download_attachment(raw) {
+    const { message_id, attachment_id, local_path } = z.object({
+      message_id: z.string(), attachment_id: z.string(), local_path: z.string().nullish(),
+    }).parse(raw);
+    return wrap("gmail_download_attachment", async () => {
+      const gmail = await getGmail();
+      // Find the attachment's filename from message metadata
+      const msg = await withRetry(() => gmail.users.messages.get({ userId: "me", id: message_id, format: "full" }));
+      const attachments = extractAttachments(msg.data.payload ?? undefined);
+      const meta = attachments.find((a) => a.attachment_id === attachment_id);
+      if (!meta) throw new Error(`Attachment '${attachment_id}' not found in message '${message_id}'`);
+      // Download
+      const attRes = await withRetry(() => gmail.users.messages.attachments.get({ userId: "me", messageId: message_id, id: attachment_id }));
+      const buf = attachmentToBuffer(attRes.data.data ?? "");
+      // Resolve path
+      let dest: string;
+      if (!local_path) {
+        dest = pathJoin(homedir(), "Downloads", meta.filename);
+      } else if (existsSync(local_path) && statSync(local_path).isDirectory()) {
+        dest = pathJoin(local_path, meta.filename);
+      } else {
+        dest = local_path;
+      }
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, buf);
+      return { status: "ok", local_path: dest, size: buf.length };
     });
   },
 };
