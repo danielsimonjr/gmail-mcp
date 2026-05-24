@@ -521,4 +521,115 @@ export const HANDLERS: Record<string, ToolHandler> = {
       return { status: "ok", message_id: res.data.id ?? "", forwarded_to: args.to };
     });
   },
+
+  async gmail_create_draft(raw) {
+    const args = z.object({
+      to: z.string(), subject: z.string(), body: z.string(),
+      cc: z.string().nullish(), in_reply_to: z.string().nullish(),
+      attachments: z.array(z.string()).nullish(),
+    }).parse(raw);
+    return wrap("gmail_create_draft", async () => {
+      const gmail = await getGmail();
+      let threadId: string | undefined;
+      let inReplyTo: string | undefined;
+      let references: string | undefined;
+      if (args.in_reply_to) {
+        const orig = await withRetry(() => gmail.users.messages.get({ userId: "me", id: args.in_reply_to!, format: "metadata", metadataHeaders: ["Message-ID", "References"] }));
+        const h = orig.data.payload?.headers ?? [];
+        threadId = orig.data.threadId ?? undefined;
+        inReplyTo = extractHeader(h, "Message-ID");
+        references = buildReferencesChain(extractHeader(h, "References"), inReplyTo);
+      }
+      const message = buildMessage({
+        to: args.to, subject: args.subject, body: args.body,
+        cc: args.cc ?? undefined, inReplyTo, references,
+        attachments: args.attachments ?? undefined,
+      });
+      const res = await withRetry(() => gmail.users.drafts.create({ userId: "me", requestBody: { message: { raw: message, threadId } } }));
+      return { status: "ok", draft_id: res.data.id ?? "", message_id: res.data.message?.id ?? "", thread_id: res.data.message?.threadId ?? "" };
+    });
+  },
+
+  async gmail_list_drafts(raw) {
+    const { limit, page_token } = z.object({ limit: z.number().default(20), page_token: z.string().nullish() }).parse(raw);
+    return wrap("gmail_list_drafts", async () => {
+      const gmail = await getGmail();
+      const listRes = await withRetry(() => gmail.users.drafts.list({ userId: "me", maxResults: limit, ...(page_token ? { pageToken: page_token } : {}) }));
+      const drafts = await Promise.all((listRes.data.drafts ?? []).map(async (d) => {
+        const draft = await withRetry(() => gmail.users.drafts.get({ userId: "me", id: d.id!, format: "metadata" }));
+        const headers = draft.data.message?.payload?.headers ?? [];
+        return {
+          draft_id: draft.data.id ?? "",
+          message_id: draft.data.message?.id ?? "",
+          thread_id: draft.data.message?.threadId ?? "",
+          to: extractHeader(headers, "To"),
+          subject: extractHeader(headers, "Subject"),
+          snippet: draft.data.message?.snippet ?? "",
+        };
+      }));
+      return { status: "ok", count: drafts.length, drafts, ...(listRes.data.nextPageToken ? { next_page_token: listRes.data.nextPageToken } : {}) };
+    });
+  },
+
+  async gmail_get_draft(raw) {
+    const { draft_id } = z.object({ draft_id: z.string() }).parse(raw);
+    return wrap("gmail_get_draft", async () => {
+      const gmail = await getGmail();
+      const draft = await withRetry(() => gmail.users.drafts.get({ userId: "me", id: draft_id, format: "full" }));
+      const headers = draft.data.message?.payload?.headers ?? [];
+      const attachments = extractAttachments(draft.data.message?.payload ?? undefined);
+      const body = decodeBody(draft.data.message?.payload ?? undefined);
+      return {
+        status: "ok",
+        draft_id: draft.data.id ?? "",
+        message_id: draft.data.message?.id ?? "",
+        thread_id: draft.data.message?.threadId ?? "",
+        to: extractHeader(headers, "To"),
+        cc: extractHeader(headers, "Cc"),
+        subject: extractHeader(headers, "Subject"),
+        body,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      };
+    });
+  },
+
+  async gmail_update_draft(raw) {
+    const args = z.object({
+      draft_id: z.string(), to: z.string(), subject: z.string(), body: z.string(),
+      cc: z.string().nullish(), attachments: z.array(z.string()).nullish(),
+    }).parse(raw);
+    return wrap("gmail_update_draft", async () => {
+      const gmail = await getGmail();
+      const existing = await withRetry(() => gmail.users.drafts.get({ userId: "me", id: args.draft_id, format: "full" }));
+      const h = existing.data.message?.payload?.headers ?? [];
+      const threadId = existing.data.message?.threadId ?? undefined;
+      const inReplyTo = extractHeader(h, "In-Reply-To") || undefined;
+      const references = extractHeader(h, "References") || undefined;
+      const message = buildMessage({
+        to: args.to, subject: args.subject, body: args.body,
+        cc: args.cc ?? undefined, inReplyTo, references,
+        attachments: args.attachments ?? undefined,
+      });
+      const res = await withRetry(() => gmail.users.drafts.update({ userId: "me", id: args.draft_id, requestBody: { message: { raw: message, threadId } } }));
+      return { status: "ok", draft_id: args.draft_id, message_id: res.data.message?.id ?? "", thread_id: res.data.message?.threadId ?? threadId ?? "" };
+    });
+  },
+
+  async gmail_send_draft(raw) {
+    const { draft_id } = z.object({ draft_id: z.string() }).parse(raw);
+    return wrap("gmail_send_draft", async () => {
+      const gmail = await getGmail();
+      const res = await withRetry(() => gmail.users.drafts.send({ userId: "me", requestBody: { id: draft_id } }));
+      return { status: "ok", message_id: res.data.id ?? "", thread_id: res.data.threadId ?? "" };
+    });
+  },
+
+  async gmail_delete_draft(raw) {
+    const { draft_id } = z.object({ draft_id: z.string() }).parse(raw);
+    return wrap("gmail_delete_draft", async () => {
+      const gmail = await getGmail();
+      await withRetry(() => gmail.users.drafts.delete({ userId: "me", id: draft_id }));
+      return { status: "ok", draft_id, deleted: true };
+    });
+  },
 };
