@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  writeSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Credentials } from "google-auth-library";
@@ -64,10 +73,20 @@ export async function loadToken(): Promise<Credentials | null> {
 
 export async function saveToken(creds: Credentials): Promise<void> {
   const dir = configDir();
-  mkdirSync(dir, { recursive: true });
+  // OAuth tokens are sensitive. Confine the config dir (0o700) and token
+  // file (0o600) to the owner. mkdir/open modes are masked by umask, so we
+  // chmod explicitly; chmod is a best-effort no-op on Windows.
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try { chmodSync(dir, 0o700); } catch { /* best effort (e.g. Windows) */ }
   const tmp = join(dir, `.token-${process.pid}-${Date.now()}.tmp`);
-  writeFileSync(tmp, JSON.stringify(creds, null, 2), { encoding: "utf8" });
+  const fd = openSync(tmp, "w", 0o600);
+  try {
+    writeSync(fd, JSON.stringify(creds, null, 2));
+  } finally {
+    closeSync(fd);
+  }
   renameSync(tmp, tokenFile());
+  try { chmodSync(tokenFile(), 0o600); } catch { /* best effort (e.g. Windows) */ }
 }
 
 export { SCOPES };
