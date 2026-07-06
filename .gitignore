@@ -10,3 +10,6 @@ __pycache__/
 dist/
 *.tsbuildinfo
 .vitest/
+
+# SDD scratch/ledger
+.superpowers/
