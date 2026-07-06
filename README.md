@@ -105,6 +105,15 @@ backoff, and batch delete.
 - **MCP annotations.** All 24 tools carry `readOnlyHint` or `destructiveHint`
   annotations as described above.
 
+## Companion skill
+
+This plugin ships a companion skill, `gmail` (`gmail-mcp:gmail`, slash
+trigger `/gmail`), at `skills/gmail/SKILL.md`. It's a **safety-tiered**
+playbook over the 24 tools above: read/search is free (no confirmation),
+while every send, forward, reply, and delete tool requires explicit,
+in-the-moment user confirmation before it's called — the skill classifies
+every tool by risk and never auto-sends or hard-deletes.
+
 ## Prerequisites
 
 - Node.js 24 or newer

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-06
+
+### Added
+
+- **Companion skill** — `gmail` (`gmail-mcp:gmail`, `/gmail`), a
+  **safety-tiered** playbook over the 24 tools: read/search is free; send,
+  forward, reply, and delete tools are gated behind explicit, in-the-moment
+  user confirmation. Ships at `skills/gmail/SKILL.md`.
+
+---
+
 ## [0.2.0] - 2026-05-24
 
 ### Changed
