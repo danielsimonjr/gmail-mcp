@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "googleapis": "^173.0.0",
     "zod": "^4.0.0"
   },
