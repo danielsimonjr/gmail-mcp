@@ -1,6 +1,7 @@
 {
   "name": "gmail-mcp",
-  "version": "0.2.0",
+  "version": "0.3.1",
+  "private": true,
   "description": "Gmail-mcp: MCP server for Gmail with sorting, attachments, drafts, and pagination",
   "type": "module",
   "main": "dist/index.js",
@@ -28,5 +29,7 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
-  "engines": { "node": ">=24" }
+  "engines": {
+    "node": ">=24"
+  }
 }

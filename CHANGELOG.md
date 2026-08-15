@@ -1,6 +1,13 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
+
+## [0.3.1] - 2026-08-15
 
 ### Security (2026-08-03)
 
@@ -20,11 +27,17 @@ fix is lock-only — no manifest change.
   tested the OS the server actually ships on. The `build` job now runs a
   `[ubuntu-latest, windows-latest]` matrix.
 
+### Fixed
 
-All notable changes to this project will be documented in this file.
+- **`package.json` was never bumped for 0.3.0, and the repo had no tags at all.**
+  The 0.3.0 release commit (`e4f5df3`) moved `.claude-plugin/plugin.json` and the
+  marketplace entry but left `package.json` at `0.2.0` and created no tag, so the
+  version the plugin cache keys on had nothing behind it — a reserved-but-unshipped
+  release. `package.json`, `plugin.json` and the marketplace entry now all read
+  `0.3.1`, and `v0.3.0` has been tagged retroactively at `e4f5df3` so
+  `git describe` has something to measure against.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+---
 
 ## [0.3.0] - 2026-07-06
 
