@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The server reported itself as `0.2.0` while shipping as `0.3.1`** — two releases stale.
+  `src/index.ts` carried the version as a string literal, so it drifted the moment
+  `package.json` moved and nothing compared the two. This is worse than cosmetic:
+  `serverInfo.version` is the field used to prove a deploy actually landed, so a stale deploy
+  and a healthy one were indistinguishable. The version is now **injected at build time** from
+  `package.json`; the literal is gone.
+
+### Added
+
+- **`scripts/bundle.mjs` — the shipped artifact is reproducible again.** `bundle/index.mjs` was
+  committed with **no build script and no bundler dependency**, so a source fix could land while
+  the plugin kept serving whatever was committed, and no gate would notice because the tests run
+  against `src/`. The flags were recovered from the shipped artifact rather than guessed: the
+  `__commonJS`/`__toESM` helpers name esbuild, the line-2 `createRequire` banner names the format
+  and the shim, and the line-1 shebang names the entry as a bin.
+  - **The banner deliberately adds no shebang.** `src/index.ts` already begins with one and
+    esbuild preserves it; emitting a second puts `#!/usr/bin/env node` on line 2, which is a
+    syntax error rather than a comment. That crashed a sibling repo's first rebuild.
+  - Verified by **executing** the rebuilt bundle over MCP stdio, not by diffing it: it reports
+    `Gmail-mcp 0.3.1` and lists all 24 tools. 97 tests pass.
+
 ## [0.3.1] - 2026-08-15
 
 ### Security (2026-08-03)

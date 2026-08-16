@@ -4,8 +4,22 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { HANDLERS, TOOLS } from "./tools.js";
 
+// Injected by scripts/bundle.mjs from package.json. MUST be declared at module scope:
+// a `declare const` inside a function is TS1184, which a vitest run (per-file transpile)
+// does not catch but `tsc` does.
+//
+// It is a declaration rather than a literal because the literal drifted. This file said
+// "0.2.0" while package.json said 0.3.1, so the deployed server misreported itself by two
+// releases - and serverInfo.version is exactly what both agents read to prove a deploy
+// landed, which made a stale deploy indistinguishable from a healthy one.
+declare const __PKG_VERSION__: string;
+
+// `tsc` (npm run build) does not apply esbuild's define, so keep a fallback for that path
+// and for a direct `node dist/index.js` run.
+const VERSION = typeof __PKG_VERSION__ === "string" ? __PKG_VERSION__ : "0.0.0-dev";
+
 const server = new Server(
-  { name: "Gmail-mcp", version: "0.2.0" },
+  { name: "Gmail-mcp", version: VERSION },
   { capabilities: { tools: {} } },
 );
 

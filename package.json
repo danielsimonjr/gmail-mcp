@@ -13,7 +13,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bundle": "node scripts/bundle.mjs"
   },
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
