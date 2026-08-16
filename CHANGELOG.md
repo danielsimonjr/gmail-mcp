@@ -28,7 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     esbuild preserves it; emitting a second puts `#!/usr/bin/env node` on line 2, which is a
     syntax error rather than a comment. That crashed a sibling repo's first rebuild.
   - Verified by **executing** the rebuilt bundle over MCP stdio, not by diffing it: it reports
-    `Gmail-mcp 0.3.1` and lists all 24 tools. 97 tests pass.
+    `Gmail-mcp 0.3.2` and lists all 24 tools. 97 tests pass.
+  - Released as **0.3.2** rather than re-shipping 0.3.1: the plugin cache is keyed on version,
+    so a same-version swap is a no-op that would have deployed nothing — the very mechanism
+    that let the stale version sit unnoticed.
 
 ## [0.3.1] - 2026-08-15
 
