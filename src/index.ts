@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { Server } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { HANDLERS, TOOLS } from "./tools.js";
 
 // Injected by scripts/bundle.mjs from package.json. MUST be declared at module scope:
@@ -14,40 +13,55 @@ import { HANDLERS, TOOLS } from "./tools.js";
 // landed, which made a stale deploy indistinguishable from a healthy one.
 declare const __PKG_VERSION__: string;
 
-// `tsc` (npm run build) does not apply esbuild's define, so keep a fallback for that path
+// `tsc` (bun run build) does not apply esbuild's define, so keep a fallback for that path
 // and for a direct `node dist/index.js` run.
 const VERSION = typeof __PKG_VERSION__ === "string" ? __PKG_VERSION__ : "0.0.0-dev";
 
-const server = new Server(
-  { name: "Gmail-mcp", version: VERSION },
-  { capabilities: { tools: {} } },
-);
+function buildServer(): Server {
+  const server = new Server(
+    { name: "Gmail-mcp", version: VERSION },
+    { capabilities: { tools: {} } },
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  server.setRequestHandler("tools/list", async () => ({ tools: TOOLS }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  const handler = HANDLERS[name];
-  if (!handler) {
-    return { content: [{ type: "text", text: JSON.stringify({ status: "error", error: `unknown tool '${name}'` }) }], isError: true };
-  }
-  try {
-    const text = await handler(args ?? {});
-    return { content: [{ type: "text", text }] };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Gmail-mcp: handler '${name}' threw: ${msg}\n`);
-    return { content: [{ type: "text", text: JSON.stringify({ status: "error", error: msg }) }], isError: true };
-  }
-});
+  server.setRequestHandler("tools/call", async (request) => {
+    const { name, arguments: args } = request.params;
+    const handler = HANDLERS[name];
+    if (!handler) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ status: "error", error: `unknown tool '${name}'` }) }],
+        isError: true,
+      };
+    }
+    try {
+      const text = await handler(args ?? {});
+      return { content: [{ type: "text", text }] };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Gmail-mcp: handler '${name}' threw: ${msg}\n`);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ status: "error", error: msg }) }],
+        isError: true,
+      };
+    }
+  });
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  process.stderr.write("Gmail-mcp: connected on stdio\n");
+  return server;
 }
 
-main().catch((err) => {
-  process.stderr.write(`Gmail-mcp: fatal: ${err instanceof Error ? err.message : String(err)}\n`);
-  process.exit(1);
+// serveStdio owns era negotiation: modern 2026-07-28 openings and legacy 2025-era
+// initialize handshakes both pin one factory instance for the connection lifetime.
+// Hand-wiring StdioServerTransport + connect() would stay on the 2025-era protocol only.
+const handle = serveStdio(buildServer, {
+  onerror: (error) => process.stderr.write(`Gmail-mcp: error: ${error instanceof Error ? error.message : String(error)}\n`),
+});
+
+process.stderr.write("Gmail-mcp: connected on stdio\n");
+
+process.on("SIGINT", () => {
+  void handle.close().finally(() => process.exit(0));
+});
+process.on("SIGTERM", () => {
+  void handle.close().finally(() => process.exit(0));
 });

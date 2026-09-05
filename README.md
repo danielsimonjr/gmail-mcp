@@ -1,7 +1,9 @@
 # Gmail-mcp
 
-A TypeScript MCP server providing 24 Gmail tools via the Google Gmail API. Built on
-[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk),
+A TypeScript-on-Bun MCP server providing 24 Gmail tools via the Google Gmail API.
+Built on
+[`@modelcontextprotocol/server`](https://github.com/modelcontextprotocol/typescript-sdk)
+v2 (MCP 2.0 / 2026-07-28, with legacy 2025-era clients still served),
 [`googleapis`](https://www.npmjs.com/package/googleapis), and
 [`@google-cloud/local-auth`](https://www.npmjs.com/package/@google-cloud/local-auth).
 Covers sorting, read/search, organize, mark, compose, drafts, and attachment
@@ -116,7 +118,8 @@ every tool by risk and never auto-sends or hard-deletes.
 
 ## Prerequisites
 
-- Node.js 24 or newer
+- Bun 1.4 or newer (toolchain: install, scripts, tests)
+- Node.js 24 or newer (runtime the Claude Code plugin launches with `node …/bundle/index.mjs`)
 - A Dropbox Google OAuth app (or any Google Cloud project) with the
   `https://mail.google.com/` scope enabled and an OAuth 2.0 Desktop client
 - `client_secret.json` downloaded from the Google Cloud Console
@@ -126,8 +129,8 @@ every tool by risk and never auto-sends or hard-deletes.
 ```bash
 git clone https://github.com/danielsimonjr/gmail-mcp.git
 cd gmail-mcp
-npm install
-npm run build
+bun install
+bun run build
 ```
 
 The build emits `dist/index.js` (MCP server) and `dist/auth-cli.js` (auth CLI).
@@ -176,9 +179,10 @@ Run `/reload-plugins` in Claude Code. Tools appear under the `mcp__gmail__*` pre
 ## Development
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm test            # vitest run — 97 tests across 14 files
-npm run build       # emit dist/
+bun run typecheck   # tsc --noEmit
+bun test            # vitest run — unit + MCP protocol suite
+bun run build       # emit dist/
+bun run bundle      # rebuild bundle/index.mjs (plugin artifact)
 ```
 
 ## License

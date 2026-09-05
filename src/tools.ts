@@ -1,4 +1,4 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { writeFileSync, mkdirSync, statSync, existsSync } from "node:fs";
 import { dirname, join as pathJoin } from "node:path";

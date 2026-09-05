@@ -11,5 +11,8 @@ dist/
 *.tsbuildinfo
 .vitest/
 
+# Bun
+*.bun-build
+
 # SDD scratch/ledger
 .superpowers/

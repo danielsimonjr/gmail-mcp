@@ -1,8 +1,9 @@
 {
   "name": "gmail-mcp",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "private": true,
-  "description": "Gmail-mcp: MCP server for Gmail with sorting, attachments, drafts, and pagination",
+  "description": "Gmail-mcp: MCP server for Gmail with sorting, attachments, drafts, and pagination (TypeScript on Bun).",
+  "packageManager": "bun@1.4.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -14,24 +15,23 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bundle": "node scripts/bundle.mjs"
+    "bundle": "bun scripts/bundle.mjs"
   },
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "googleapis": "^176.0.0",
     "zod": "^4.0.0"
   },
-  "overrides": {
-    "uuid": "^11.1.1"
-  },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^26.4.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "engines": {
+    "bun": ">=1.4.0",
     "node": ">=24"
   }
 }
