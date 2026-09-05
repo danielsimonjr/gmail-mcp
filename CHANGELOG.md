@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-05
+
+### Changed
+
+- **Bun toolchain for TypeScript development.** Install and scripts use Bun
+  (`bun install`, `bun run …`); `packageManager` / `engines` declare Bun ≥1.4 and
+  Node ≥24. Node remains the MCP server runtime — the Claude Code plugin still
+  launches `node …/bundle/index.mjs`. Docs and the `bundle` script no longer
+  assume npm/Node for the toolchain.
+
+- **MCP 2.0 (2026-07-28) protocol support.** Upgraded from
+  `@modelcontextprotocol/sdk` v1 to `@modelcontextprotocol/server` v2 and replaced
+  the hand-wired `server.connect(StdioServerTransport)` entry with `serveStdio`, which
+  negotiates the connection era on open. The server now speaks the stateless 2026-07-28
+  revision (per-request `_meta`, `server/discover`, no `initialize` handshake) while
+  still serving legacy 2025-era clients on the same stdio transport. Added protocol
+  integration tests that verify modern-era negotiation and tool listing.
 
 ## 0.3.3 — 2026-08-22
 
@@ -23,7 +40,7 @@ cache — said 0.3.3. The bundle embeds `VERSION` at build time.
 **This is the second time.** c65af02 records "the 0.3.2 entry claimed the bundle reports
 0.3.1". Repeating it is the tell that the ORDER is the rule, not the care taken:
 
-    bump package.json + .claude-plugin/plugin.json  ->  npm run bundle  ->  commit all
+    bump package.json + .claude-plugin/plugin.json  ->  bun run bundle  ->  commit all
 
 A rebuild before the bump embeds the old string, and matching version numbers in the
 manifests prove nothing — that is exactly what goes stale. Caught here by a staleness
