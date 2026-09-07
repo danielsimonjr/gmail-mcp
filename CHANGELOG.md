@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The protocol test pinned the version it then asserted, so it could not fail.**
+  `tests/protocol.test.ts` opened the client with
+  `versionNegotiation: { mode: { pin: "2026-07-28" } }` and asserted the negotiated
+  version equalled `"2026-07-28"`. A pin is echoed back, so the assertion restated its
+  own input and passed while the built server negotiated `2025-11-25`. The test now
+  opens an UNPINNED client and asserts against `LATEST_PROTOCOL_VERSION`, so it fails
+  when the real negotiated version moves.
+
+- **Corrected the `2026-07-28` protocol claim in README, `src/index.ts` and the 0.4.0
+  entry.** Verified by probing the shipped `bundle/index.mjs` over stdio with a real
+  `initialize` + `tools/list`: `negotiated: 2025-11-25 | tools/list: 24`.
+
+### Changed
+
+- `vitest` 4.1.11 -> 5.0.0, with `bun.lock` regenerated under Bun 1.4.2 (Dependabot
+  uses the npm ecosystem and does not touch the Bun lockfile, so CI failed at
+  `bun install --frozen-lockfile` before any test ran).
+
+### Known
+
+- An UNPINNED client negotiates the **legacy** era against this server while still
+  agreeing on `LATEST_PROTOCOL_VERSION`. The old test hid this by pinning. Recorded,
+  not changed -- protocol behaviour is an ADR-level call.
+
 ## [0.4.0] - 2026-09-05
 
 ### Changed
@@ -15,13 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   launches `node …/bundle/index.mjs`. Docs and the `bundle` script no longer
   assume npm/Node for the toolchain.
 
-- **MCP 2.0 (2026-07-28) protocol support.** Upgraded from
+- **MCP SDK v2 (package major).** Upgraded from
   `@modelcontextprotocol/sdk` v1 to `@modelcontextprotocol/server` v2 and replaced
   the hand-wired `server.connect(StdioServerTransport)` entry with `serveStdio`, which
-  negotiates the connection era on open. The server now speaks the stateless 2026-07-28
-  revision (per-request `_meta`, `server/discover`, no `initialize` handshake) while
-  still serving legacy 2025-era clients on the same stdio transport. Added protocol
-  integration tests that verify modern-era negotiation and tool listing.
+  negotiates the connection era on open, while still serving legacy clients on the same
+  stdio transport. The negotiated PROTOCOL version is `2025-11-25`
+  (`LATEST_PROTOCOL_VERSION`), not `2026-07-28` -- the package major and the protocol
+  version are separate facts, corrected 2026-09-07 after probing the built artifact.
+  Added protocol integration tests covering negotiation and tool listing.
 
 ## 0.3.3 — 2026-08-22
 

@@ -50,9 +50,11 @@ function buildServer(): Server {
   return server;
 }
 
-// serveStdio owns era negotiation: modern 2026-07-28 openings and legacy 2025-era
-// initialize handshakes both pin one factory instance for the connection lifetime.
-// Hand-wiring StdioServerTransport + connect() would stay on the 2025-era protocol only.
+// serveStdio owns era negotiation: modern and legacy initialize handshakes both pin
+// one factory instance for the connection lifetime. The negotiated protocol version is
+// the SDK's LATEST_PROTOCOL_VERSION (2025-11-25 as of server v2.0.0) -- the PACKAGE
+// major and the PROTOCOL version are separate facts, and "2026-07-28" is neither: it
+// appears in the SDK only inside client error text naming a future era.
 const handle = serveStdio(buildServer, {
   onerror: (error) => process.stderr.write(`Gmail-mcp: error: ${error instanceof Error ? error.message : String(error)}\n`),
 });

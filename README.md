@@ -3,7 +3,7 @@
 A TypeScript-on-Bun MCP server providing 24 Gmail tools via the Google Gmail API.
 Built on
 [`@modelcontextprotocol/server`](https://github.com/modelcontextprotocol/typescript-sdk)
-v2 (MCP 2.0 / 2026-07-28, with legacy 2025-era clients still served),
+v2 (package major 2; the SDK negotiates protocol 2025-11-25),
 [`googleapis`](https://www.npmjs.com/package/googleapis), and
 [`@google-cloud/local-auth`](https://www.npmjs.com/package/@google-cloud/local-auth).
 Covers sorting, read/search, organize, mark, compose, drafts, and attachment
