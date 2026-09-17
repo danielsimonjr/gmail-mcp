@@ -110,7 +110,7 @@ backoff, and batch delete.
 ## Companion skill
 
 This plugin ships a companion skill, `gmail` (`gmail-mcp:gmail`, slash
-trigger `/gmail`), at `skills/gmail/SKILL.md`. It's a **safety-tiered**
+trigger `/gmail`), at `plugin/skills/gmail/SKILL.md`. It's a **safety-tiered**
 playbook over the 24 tools above: read/search is free (no confirmation),
 while every send, forward, reply, and delete tool requires explicit,
 in-the-moment user confirmation before it's called — the skill classifies

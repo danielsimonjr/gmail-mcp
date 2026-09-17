@@ -29,7 +29,7 @@ await build({
   target: "node22",
   format: "esm",
   banner: { js: banner },
-  outfile: "bundle/index.mjs",
+  outfile: "plugin/bundle/index.mjs",
   logLevel: "warning",
   // The version the server reports about itself is INJECTED, never written in source.
   // It previously read "0.2.0" while package.json said 0.3.1, so the deployed server
@@ -38,4 +38,4 @@ await build({
   define: { __PKG_VERSION__: JSON.stringify(pkg.version) },
 });
 
-console.log(`bundled -> bundle/index.mjs (version ${pkg.version})`);
+console.log(`bundled -> plugin/bundle/index.mjs (version ${pkg.version})`);

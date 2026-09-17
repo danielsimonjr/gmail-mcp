@@ -1,6 +1,6 @@
 {
   "name": "gmail-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Gmail-mcp: MCP server for Gmail with sorting, attachments, drafts, and pagination (TypeScript on Bun).",
   "packageManager": "bun@1.4.2",

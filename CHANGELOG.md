@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-09-17
 
 ### Changed
 
@@ -80,6 +80,37 @@ cache — said 0.3.3. The bundle embeds `VERSION` at build time.
 A rebuild before the bump embeds the old string, and matching version numbers in the
 manifests prove nothing — that is exactly what goes stale. Caught here by a staleness
 sweep across every bundle-shipping repo, not by noticing.
+
+### Changed
+
+- **The plugin now lives in `plugin/`.** The marketplace entry installed the whole
+  repository root. The root carries `package.json` and `bun.lock`, so Claude Code's
+  installer ran `bun install --frozen-lockfile --ignore-scripts` on every install, and
+  the cached plugin held **321.4 MB** of `node_modules` (355.8 MB total) — typescript,
+  vitest, esbuild and the `@modelcontextprotocol/client` test stack, none of which the
+  shipped server runs. The installer has no omit-dev option, so the only fix is to
+  install a directory that has no lockfile.
+
+  `plugin/` now holds `.claude-plugin/plugin.json`, `.mcp.json`, `bundle/` and `skills/`
+  and NOTHING else — no `package.json`, no lockfile. The repository root keeps its own
+  `package.json` and `bun.lock` for development, and `scripts/bundle.mjs` writes to
+  `plugin/bundle/index.mjs`. The marketplace entry must become `git-subdir` with
+  `path: "plugin"`.
+
+  `bundle/index.mjs` is fully self-contained: it has **zero runtime externals** —
+  `googleapis` and `google-auth-library` are runtime dependencies, but esbuild inlines
+  them into the artifact. Verified by copying `plugin/` alone into an empty directory
+  (no `node_modules` and no `package.json` anywhere above it) and driving the real server
+  over stdio — `initialize` and `tools/list` both succeed and return **24 tools**,
+  negotiating `2025-11-25`. Repeated with every non-builtin `import` and `require` denied
+  by a loader hook: still 24 tools, zero denials. The guard is failure-capable — a control
+  server that does `require("typescript")` under the same guard fails with
+  `DENIED_EXTERNAL_REQUIRE: typescript`.
+
+  Version 0.5.0, not 0.4.0. The plugin cache is keyed by version and already holds
+  `local-marketplace/gmail-mcp/0.4.0/`, so reusing that number would have reinstalled
+  nothing and measured no change.
+
 ## [0.3.2] - 2026-08-16
 
 ### Fixed
