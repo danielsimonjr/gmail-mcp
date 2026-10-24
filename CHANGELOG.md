@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-10-24
+
+### Security
+
+- **The server bundle carries the fixed MCP server SDK and zod.** `bun audit` reported 14 advisories on this tree
+  (6 high, 7 moderate, 1 low) and reports none after this change. `bun.lock` moves `@modelcontextprotocol/server`
+  and its dependency `@modelcontextprotocol/core` from 2.0.0 to 2.3.0 and `zod` from 4.5.4 to 4.6.6. Both are
+  runtime dependencies, so the new `plugin/bundle/index.mjs` contains them. The declared ranges (`^2.0.0` and
+  `^4.0.0`) already admitted the fixed versions.
+  - Server SDK, fixed in 2.3.0 (affected `>=2.0.0 <2.3.0`): GHSA-jm63-cq47-j5jp (high), GHSA-46jr-4wx8-v453
+    (high) and GHSA-rvq5-wwqv-78pq (moderate). Their titles name HTTP clients, HTTP requests and bearer
+    authentication. This server serves over stdio only, so the bundle held no path that those titles describe;
+    the dependency moves anyway.
+  - `zod`, fixed in 4.6.6: GHSA-mrhx-c7xc-m3w5 (high), memory exhaustion while validating oversized constrained
+    collections.
+  - Development dependencies, none of them in the bundle: `@modelcontextprotocol/client` (2.0.0 to 2.3.0, used by
+    the protocol test only) with GHSA-6qxp-vccf-f47h (high) and GHSA-6prh-2h8m-c8cw (moderate); `source-map-js`
+    (1.2.1 to 1.2.2) with GHSA-68fv-2mgg-jv7q (high); and `vite` (8.2.2 to 8.2.4, with its `launch-editor`) with
+    GHSA-587h-7wmj-h5pm (high), GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-rq7h-c2jc-7f22 and GHSA-vfpm-58rq-9qcg
+    (moderate), and GHSA-9jrq-w75r-8gcw (low).
+  - `uuid` 9.0.1 (GHSA-w5hq-g745-h8pq, moderate, missing buffer bounds check in `v3`, `v5` and `v6` when a buffer is
+    passed) comes only through `@google-cloud/local-auth`, whose latest release (3.0.1) pins `google-auth-library`
+    9 and so `gaxios` 6, and `gaxios` 6 pins `uuid` `^9.0.1`. `bun audit fix` cannot cross that range. The new
+    `overrides` entry `"uuid": "^11.1.1"` in `package.json` resolves it to 11.1.1. The plugin bundle has no `uuid`
+    section (`googleapis` brings its own `gaxios` 7, which uses `crypto.randomUUID`); the entry matters only for the
+    `gmail-mcp-auth` command, where `gaxios` 6 calls `uuid.v4()` and nothing else. The module loads and
+    `v4()` returns a 36-character id under the override; the OAuth flow itself was not run.
+  - Measured on the rebuilt bundle over stdio, with an empty configuration folder: the server reports `0.5.1`,
+    lists the same 24 tools as the previous bundle (same hash of the sorted names), and answers an unknown tool
+    name with the same error. The previous bundle rebuilds byte for byte from the previous lock when built at the
+    path depth of the original build, so the new bundle differs only by `zod`, the server SDK, the version string
+    and the identifier renames that `esbuild` makes when a module gains a name. `typecheck`, `build` and `vitest`
+    (15 files, 99 tests) pass.
+  - The plugin reaches this fix through its own version: `plugin/.claude-plugin/plugin.json` moves to 0.5.1, which
+    is the version the bundle reports.
+
 ## 2026-10-01
 
 - **Removed the dead root `npm` Dependabot entry.** No dependency-update ecosystem works on a
