@@ -22,6 +22,9 @@ const banner =
   "const __filename = __fileURLToPath(import.meta.url);" +
   "const __dirname = __dirnameOf(__filename);";
 
+// The output file can be changed by the environment, so a check can build into a temp file and compare it with the committed bundle.
+const outfile = process.env.BUNDLE_OUT ?? "plugin/bundle/index.mjs";
+
 await build({
   entryPoints: ["src/index.ts"],
   bundle: true,
@@ -29,7 +32,11 @@ await build({
   target: "node22",
   format: "esm",
   banner: { js: banner },
-  outfile: "plugin/bundle/index.mjs",
+  outfile,
+  // debug asks for supports-color inside a try block and declares it optional, so no install brings it. A node_modules
+  // folder above the repository can still supply it, with has-flag, and the bundle then depends on the machine.
+  // External keeps both packages out, so every build gives the same bundle. debug falls back to its basic colors.
+  external: ["supports-color"],
   logLevel: "warning",
   // The version the server reports about itself is INJECTED, never written in source.
   // It previously read "0.2.0" while package.json said 0.3.1, so the deployed server
@@ -38,4 +45,4 @@ await build({
   define: { __PKG_VERSION__: JSON.stringify(pkg.version) },
 });
 
-console.log(`bundled -> plugin/bundle/index.mjs (version ${pkg.version})`);
+console.log(`bundled -> ${outfile} (version ${pkg.version})`);

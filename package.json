@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bundle": "bun scripts/bundle.mjs"
+    "bundle": "bun scripts/bundle.mjs",
+    "check:bundle-content": "node scripts/check-bundle-content.mjs"
   },
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",

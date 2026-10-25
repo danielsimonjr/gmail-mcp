@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The bundle build gives the same bundle on every machine, and CI checks it.** The package `debug` asks for the
+  optional package `supports-color` inside a try block, and no install brings it. A `node_modules` folder above the
+  repository supplied `supports-color` and `has-flag`. A build on the author machine therefore held 128 lines
+  that a build in a clean checkout did not hold. `scripts/bundle.mjs` now marks `supports-color` as external, and `debug`
+  falls back to its basic colors. The script also reads the output file from the variable `BUNDLE_OUT`.
+  The new script `scripts/check-bundle-content.mjs` (`bun run check:bundle-content`) builds the bundle into a temp
+  file and compares the temp file with `plugin/bundle/index.mjs`. The CI job runs the script on Ubuntu and Windows
+  after the install.
+  Before this change no check read the committed bundle. The rebuilt bundle starts and reports version 0.5.1, as
+  before. The rebuilt bundle reaches the installed plugin with the next version bump.
+
 ## [0.5.1] - 2026-10-24
 
 ### Security
