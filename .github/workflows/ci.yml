@@ -40,6 +40,10 @@ jobs:
         with:
           bun-version: '1.4.2'
       - run: bun install --frozen-lockfile
+      # The plugin runs plugin/bundle/index.mjs and no other step reads it. This step builds the bundle again and
+      # compares it with the committed file. A runner has no node_modules folder above the repository, so a bundle
+      # that holds a module from such a folder fails here.
+      - run: bun run check:bundle-content
       # --if-present must precede the script name (bun passes a trailing flag through).
       - run: bun run --if-present typecheck
       - run: bun run --if-present lint

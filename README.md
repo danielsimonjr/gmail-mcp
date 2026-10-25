@@ -182,7 +182,8 @@ Run `/reload-plugins` in Claude Code. Tools appear under the `mcp__gmail__*` pre
 bun run typecheck   # tsc --noEmit
 bun test            # vitest run — unit + MCP protocol suite
 bun run build       # emit dist/
-bun run bundle      # rebuild bundle/index.mjs (plugin artifact)
+bun run bundle      # rebuild plugin/bundle/index.mjs (plugin artifact)
+bun run check:bundle-content  # fail when the committed bundle differs from a fresh build
 ```
 
 ## License
